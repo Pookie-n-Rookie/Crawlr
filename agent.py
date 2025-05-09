@@ -6,22 +6,22 @@ from crewai.tools import BaseTool
 from langchain_openai import ChatOpenAI
 from typing import Optional, Dict, Any
 
-
+# Load environment variables
 load_dotenv()
-TAVILY: Optional[str] = os.getenv("TAVILY_API_KEY")
-GROQ_API_KEY: Optional[str] = os.getenv("GROQ_API_KEY")
+TAVILY_API_KEY: Optional[str] = os.getenv("TAVILY_API_KEY")
+GROQ_API_KEY: Optional[str] = os.getenv("GROQ_API_KEY")  # Make sure this is correct in your .env
 
-
+# ------------------- Web Search Tool -------------------
 class SearchTool(BaseTool):
     name: str = "Web Search Tool"
     description: str = "Searches the web for recent and relevant information."
 
     def _run(self, query: str) -> str:
         try:
-            if not TAVILY:
+            if not TAVILY_API_KEY:
                 raise ValueError("Tavily API key not found")
                 
-            tav = TavilyClient(api_key=TAVILY)
+            tav = TavilyClient(api_key=TAVILY_API_KEY)
             result = tav.search(
                 query=query,
                 include_answers=True,
@@ -35,20 +35,23 @@ class SearchTool(BaseTool):
         except Exception as e:
             return f"⚠️ Search failed. Error: {str(e)}"
 
-
+# ------------------- LLM Configuration -------------------
 def set_llm() -> ChatOpenAI:
     if not GROQ_API_KEY:
-        raise ValueError("Groq API key not found")
+        raise ValueError("Groq API key not found in environment variables")
+    
+    # Ensure the API key is properly stripped of whitespace
+    groq_api_key = GROQ_API_KEY.strip()
     
     return ChatOpenAI(
-        model="groq/llama3-70b-8192", 
-        api_key=GROQ_API_KEY,
+        model="groq/llama3-70b-8192",
+        api_key=groq_api_key,  # Use the stripped key
         base_url="https://api.groq.com/openai/v1",
         temperature=0.5,
         max_tokens=1024
     )
 
-
+# ------------------- Crew Setup -------------------
 def form_crew(query: str) -> Crew:
     llm = set_llm()
     researcher = Agent(
@@ -69,17 +72,15 @@ def form_crew(query: str) -> Crew:
             f"Research the topic: '{query}'\n"
             "Instructions:\n"
             "- Only use verified, recent information\n"
-            "- Present a clear and concise comparison\n"
-            "- Highlight key differences in specs, features, and price\n"
+            "- Present a clear and concise summary\n"
+            "- Highlight key aspects\n"
             "- Provide 3–5 relevant sources with titles and URLs"
         ),
         expected_output=(
-            "1. Overview of both products\n"
-            "2. Key specifications comparison (table format)\n"
-            "3. Feature comparison\n"
-            "4. Price comparison\n"
-            "5. Buying recommendation\n"
-            "6. 3–5 Reference links with titles"
+            "1. Overview of the topic\n"
+            "2. Key findings\n"
+            "3. Summary with evidence\n"
+            "4. 3–5 Reference links with titles"
         ),
         agent=researcher,
         output_file="research_output.md"
@@ -115,4 +116,10 @@ def main() -> None:
             print(f"\n❌ Error: {str(e)}")
 
 if __name__ == "__main__":
-    main()
+    # Verify environment variables
+    if not os.getenv("GROQ_API_KEY"):
+        print("❌ Error: GROQ_API_KEY not found in .env file")
+    elif not os.getenv("TAVILY_API_KEY"):
+        print("❌ Error: TAVILY_API_KEY not found in .env file")
+    else:
+        main()
